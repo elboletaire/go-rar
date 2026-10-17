@@ -1,6 +1,6 @@
-// Package rar writes RAR 2.9-4.x archives using only the Store method. Its API
-// follows archive/zip, so code that uses zip.NewWriter can switch to NewWriter
-// with few changes.
+// Package rar reads and writes RAR 2.9-4.x archives using only the Store method.
+// Its API follows archive/zip, so code that uses zip.NewWriter can switch to
+// NewWriter with few changes.
 package rar
 
 import (
@@ -128,12 +128,14 @@ type headerFileInfo struct {
 	fh *FileHeader
 }
 
-func (fi headerFileInfo) Name() string       { return path.Base(fi.fh.Name) }
-func (fi headerFileInfo) Size() int64        { return int64(fi.fh.UnpackedSize) }
-func (fi headerFileInfo) IsDir() bool        { return fi.Mode().IsDir() }
-func (fi headerFileInfo) ModTime() time.Time { return fi.fh.Modified }
-func (fi headerFileInfo) Mode() fs.FileMode  { return fi.fh.Mode() }
-func (fi headerFileInfo) Sys() any           { return fi.fh }
+func (fi headerFileInfo) Name() string               { return path.Base(fi.fh.Name) }
+func (fi headerFileInfo) Size() int64                { return int64(fi.fh.UnpackedSize) }
+func (fi headerFileInfo) IsDir() bool                { return fi.Mode().IsDir() }
+func (fi headerFileInfo) ModTime() time.Time         { return fi.fh.Modified }
+func (fi headerFileInfo) Mode() fs.FileMode          { return fi.fh.Mode() }
+func (fi headerFileInfo) Sys() any                   { return fi.fh }
+func (fi headerFileInfo) Type() fs.FileMode          { return fi.Mode().Type() }
+func (fi headerFileInfo) Info() (fs.FileInfo, error) { return fi, nil }
 
 // Mode returns the permission and type bits of the file. Win32 and DOS
 // attributes map to 0666 for files and 0777 for directories, with the write

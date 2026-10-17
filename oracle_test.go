@@ -2,6 +2,7 @@ package rar
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"math/rand/v2"
 	"os"
@@ -102,12 +103,20 @@ func runOracle(t *testing.T, tool string, args ...string) string {
 	return string(out)
 }
 
-// sltSizes maps each path in `7z l -slt` output to its size. The entries follow
+// sltEntry is the part of a `7z l -slt` entry that the tests compare.
+type sltEntry struct {
+	size int64
+	crc  string // hex, as 7z prints it; empty when 7z prints none
+	dir  bool
+}
+
+// sltEntries maps each path in `7z l -slt` output to its entry. The entries follow
 // the "----------" line; the archive header above it is skipped.
-func sltSizes(t *testing.T, out string) map[string]int64 {
+func sltEntries(t *testing.T, out string) map[string]sltEntry {
 	t.Helper()
-	sizes := make(map[string]int64)
+	entries := make(map[string]sltEntry)
 	var path string
+	var e sltEntry
 	inEntries := false
 	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimRight(line, "\r")
@@ -117,13 +126,29 @@ func sltSizes(t *testing.T, out string) map[string]int64 {
 		case !inEntries:
 		case strings.HasPrefix(line, "Path = "):
 			path = filepath.ToSlash(strings.TrimPrefix(line, "Path = "))
+			e = sltEntry{}
+		case strings.HasPrefix(line, "Folder = "):
+			e.dir = strings.TrimPrefix(line, "Folder = ") == "+"
+		case strings.HasPrefix(line, "CRC = "):
+			e.crc = strings.TrimPrefix(line, "CRC = ")
 		case strings.HasPrefix(line, "Size = "):
 			n, err := strconv.ParseInt(strings.TrimPrefix(line, "Size = "), 10, 64)
 			if err != nil {
 				t.Fatalf("bad size line %q: %v", line, err)
 			}
-			sizes[path] = n
+			e.size = n
+			entries[path] = e
 		}
+	}
+	return entries
+}
+
+// sltSizes maps each path in `7z l -slt` output to its size.
+func sltSizes(t *testing.T, out string) map[string]int64 {
+	t.Helper()
+	sizes := make(map[string]int64)
+	for path, e := range sltEntries(t, out) {
+		sizes[path] = e.size
 	}
 	return sizes
 }
@@ -209,6 +234,49 @@ func TestOracle7zList(t *testing.T) {
 		if want := int64(len(of.data)); size != want {
 			t.Errorf("7z l: %q size %d, want %d", name, size, want)
 		}
+	}
+}
+
+// TestOracle7zListFixtures compares the entries of the libarchive fixtures with
+// what 7z reads from them: names, sizes, directories and CRC32.
+func TestOracle7zListFixtures(t *testing.T) {
+	tool := oracleTool(t, "7z")
+	paths, err := filepath.Glob(filepath.Join("testdata", "libarchive", "*.rar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no fixtures in testdata/libarchive")
+	}
+	for _, p := range paths {
+		t.Run(filepath.Base(p), func(t *testing.T) {
+			entries := sltEntries(t, runOracle(t, tool, "l", "-slt", "-sccUTF-8", p))
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rr := readerOf(t, b)
+			if len(entries) != len(rr.File) {
+				t.Fatalf("7z lists %d entries, reader %d", len(entries), len(rr.File))
+			}
+			for _, f := range rr.File {
+				name := strings.TrimSuffix(f.Name, "/")
+				e, ok := entries[name]
+				if !ok {
+					t.Errorf("7z does not list %q", name)
+					continue
+				}
+				if e.dir != f.Mode().IsDir() {
+					t.Errorf("%s: 7z dir %v, reader %v", name, e.dir, f.Mode().IsDir())
+				}
+				if e.size != int64(f.UnpackedSize) {
+					t.Errorf("%s: 7z size %d, reader %d", name, e.size, f.UnpackedSize)
+				}
+				if want := fmt.Sprintf("%08X", f.CRC32); e.crc != "" && e.crc != want {
+					t.Errorf("%s: 7z CRC %s, reader %s", name, e.crc, want)
+				}
+			}
+		})
 	}
 }
 
