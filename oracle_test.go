@@ -262,6 +262,10 @@ func TestOracle7zListFixtures(t *testing.T) {
 			for _, f := range rr.File {
 				name := strings.TrimSuffix(f.Name, "/")
 				e, ok := entries[name]
+				// Windows 7z decodes non-Unicode names with the ANSI code page, not UTF-8.
+				if !ok && runtime.GOOS == "windows" && f.Flags&fileFlagUnicode == 0 && !isASCII(name) {
+					continue
+				}
 				if !ok {
 					t.Errorf("7z does not list %q", name)
 					continue
@@ -292,4 +296,13 @@ func TestOracleBsdtarExtract(t *testing.T) {
 	dir := t.TempDir()
 	runOracle(t, tool, "-xf", writeOracleArchive(t), "-C", dir)
 	checkExtracted(t, dir)
+}
+
+func isASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
