@@ -13,9 +13,9 @@ const (
 	nameOpCopy     = 3 // a run copied from the ASCII part (decoder only)
 )
 
-// encodeName returns the FILE_NAME bytes for name, which uses "\" separators.
-// The layout is in the "File names" section of docs/specs/2026-10-17-rar4-design.md.
-// name must not contain a zero byte.
+// encodeName returns the FILE_NAME bytes for name, which uses "\" separators and
+// must not contain a zero byte. Non-ASCII names are the UTF-8 bytes, a zero byte,
+// then RAR's opcode-encoded UTF-16 (HIGH byte, then a flag byte per 4 chars).
 func encodeName(name string) (b []byte, unicode bool) {
 	ascii := true
 	for i := range len(name) {
@@ -48,8 +48,8 @@ func encodeName(name string) (b []byte, unicode bool) {
 	return b, true
 }
 
-// decodeName returns the name in field; see the "File names" section of
-// docs/specs/2026-10-17-rar4-design.md. Without the Unicode flag the bytes are
+// decodeName returns the name in field, the inverse of encodeName plus opcode 3
+// (runs copied from the ASCII part). Without the Unicode flag the bytes are
 // returned as they are; malformed or truncated UTF-16 data ends decoding early.
 func decodeName(field []byte, unicode bool) string {
 	if !unicode {
