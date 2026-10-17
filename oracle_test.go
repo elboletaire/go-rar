@@ -75,6 +75,10 @@ func oracleTool(t *testing.T, name string) string {
 	t.Helper()
 	path, err := exec.LookPath(name)
 	if err != nil {
+		// CI sets RAR_ORACLES=require so a missing tool fails instead of silently skipping.
+		if os.Getenv("RAR_ORACLES") == "require" {
+			t.Fatalf("%s not found: %v", name, err)
+		}
 		t.Skipf("%s not found: %v", name, err)
 	}
 	return path
