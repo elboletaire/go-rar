@@ -4,8 +4,15 @@ Pure Go reader and writer for RAR 2.9-4.x archives. It stores files without
 compression, with an API that mirrors `archive/zip`, so `zip.NewWriter` can
 often become `rar.NewWriter`.
 
-CBR pages are already-compressed images, so compression would gain little, and
-RAR4 is read by far more readers than RAR5.
+It was built so [manga-downloader](https://github.com/elboletaire/manga-downloader)
+can pack chapters as CBR files, comic archives that are just RAR files renamed,
+as CBZ is to ZIP. That's why it targets RAR4 store-only: the pages are
+already-compressed images, so compression gains little, and many comic readers
+(junrar-based Android apps, Komga...) can't open RAR5.
+
+Need RAR5 instead? [go-filesystems/rar](https://github.com/go-filesystems/rar)
+writes RAR5 stored archives and reads RAR4/RAR5, compressed and encrypted ones
+included.
 
 ## Install
 
